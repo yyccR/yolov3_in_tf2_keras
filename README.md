@@ -1,24 +1,26 @@
 
 ```python
-class VGG(nn.Module):
-    def __init__(self, image_size=448):
-        super(VGG, self).__init__()
-        self.features = nn.Sequential(*layers)
-        self.image_size = image_size
-        self.classifier = nn.Sequential(
-            nn.Linear(512 * 7 * 7, 4096),
-            nn.ReLU(True),
-            nn.Dropout(),
-            nn.Linear(4096, 1470),
-        )
-        self._initialize_weights()
-
-    def forward(self, x):
-        x = self.features(x)
-        x = x.view(x.size(0), -1)
-        x = self.classifier(x)
-        x = F.sigmoid(x)
-        x = x.view(-1, 7, 7, 30)
-        return x
-
+def encoder(boxes,labels):
+    '''
+    boxes (tensor) [[x1,y1,x2,y2],[]]
+    labels (tensor) [...]
+    return 7x7x30
+    '''
+    grid_num = 7
+    target = torch.zeros((grid_num,grid_num,30))
+    wh = boxes[:,2:]-boxes[:,:2]
+    cxcy = (boxes[:,2:]+boxes[:,:2])/2
+    for i in range(cxcy.size()[0]):
+        cxcy_sample = cxcy[i]
+        ij = (cxcy_sample * grid_num).ceil()-1 #
+        target[int(ij[1]),int(ij[0]),4] = 1
+        target[int(ij[1]),int(ij[0]),9] = 1
+        target[int(ij[1]),int(ij[0]),int(labels[i])+9] = 1
+        xy = ij / grid_num
+        delta_xy = (cxcy_sample -xy) * grid_num
+        target[int(ij[1]),int(ij[0]),2:4] = wh[i]
+        target[int(ij[1]),int(ij[0]),:2] = delta_xy
+        target[int(ij[1]),int(ij[0]),7:9] = wh[i]
+        target[int(ij[1]),int(ij[0]),5:7] = delta_xy
+    return target
 ```
