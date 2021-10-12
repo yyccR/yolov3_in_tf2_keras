@@ -6,9 +6,9 @@ import tensorflow as tf
 from darknet import DarkNet
 from loss import loss
 from data_ops import transform_targets
-from generate_coco_data import CoCoDataGenrator
+from data.generate_coco_data import CoCoDataGenrator
 from visual_ops import draw_bounding_box
-from generate_yolo_tfrecord_files import parse_yolo_coco_tfrecord
+from data.generate_yolo_tfrecord_files import parse_yolo_coco_tfrecord
 
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 

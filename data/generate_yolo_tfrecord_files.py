@@ -1,10 +1,7 @@
-
-
-import os
 import tensorflow as tf
 import numpy as np
 from data_ops import transform_targets
-from generate_coco_data import CoCoDataGenrator
+from data.generate_coco_data import CoCoDataGenrator
 
 
 def tensor_feature(value):
@@ -117,7 +114,6 @@ if __name__ == "__main__":
     import os
 
     os.environ["CUDA_VISIBLE_DEVICES"] = "0"
-    import time
 
     # generate_yolo_coco_tfrecord(is_training=True)
     parse_data = parse_yolo_coco_tfrecord(is_training=True, repeat=1)

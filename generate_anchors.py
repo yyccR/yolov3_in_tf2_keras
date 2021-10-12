@@ -1,7 +1,7 @@
 
 import numpy as np
 import matplotlib.pyplot as plt
-from generate_coco_data import CoCoDataGenrator
+from data.generate_coco_data import CoCoDataGenrator
 
 
 def save_coco_all_wh(anno_file, image_shape, output_anchor_file):
@@ -110,5 +110,5 @@ if __name__ == "__main__":
     #     output_anchor_file='../../data/coco2017/coco2017_val_all_wh.txt'
     # )
 
-    data = get_wh('../../data/coco2017/coco2017_val_all_wh.txt')
-    kmeans(data, 9)
+    data = get_wh('./data/coco2017_val_all_wh.txt')
+    kmeans(data, 9, save_cluster_fig="./data/anchors_test.png")
