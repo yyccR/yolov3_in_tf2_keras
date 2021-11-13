@@ -2,6 +2,7 @@
 
 import os
 import numpy as np
+import cv2
 import tensorflow as tf
 from darknet import DarkNet
 from loss import loss
@@ -23,7 +24,8 @@ class YoloV3:
                  batch_size=5,
                  yolo_max_boxes=100,
                  yolo_iou_threshold=0.5,
-                 yolo_score_threshold=0.5):
+                 yolo_score_threshold=0.5,
+                 weights_path=None):
         self.classes = classes
         self.image_shape = image_shape
         self.is_training = is_training
@@ -41,6 +43,8 @@ class YoloV3:
         self.anchor_masks = np.array([[6, 7, 8], [3, 4, 5], [0, 1, 2]])
         self.darnet = DarkNet()
         self.yolo_model = self.build_graph(is_training=self.is_training)
+        if not is_training:
+            self.yolo_model.load_weights(weights_path)
 
     def yolo_head(self, feature_maps, filters, num_anchors, num_class):
         if isinstance(feature_maps, tuple):
@@ -114,7 +118,7 @@ class YoloV3:
         return bbox, objectness, class_probs, pred_box
 
     def yolo_nms(self, yolo_pred, num_class):
-        """ 对边框做非极大抑制
+        """ 对边框做非极大抑制, todo:对不同类别做nms
 
         :param yolo_pred: ([boxes, objectness, class_probs],
                            [boxes, objectness, class_probs],
@@ -124,10 +128,10 @@ class YoloV3:
                objectness: [batch_size, grid, grid, anchors, 1]
                class_probs: [batch_size, grid, grid, anchors, num_classes]
         :param num_class:
-        :return: boxes: [1, nms_nums, (x1, y1, x2, y2)]
-                 scores: [1, nms_nums]
-                 scores: [1, nms_nums]
-                 num_valid_nms_boxes: [1, 1]
+        :return: boxes: [batch_size, nms_nums, (x1, y1, x2, y2)]
+                 scores: [batch_size, nms_nums]
+                 scores: [batch_size, nms_nums]
+                 num_valid_nms_boxes: [batch_size, 1]
         """
         boxes, objectness, class_probs = [], [], []
 
@@ -158,8 +162,8 @@ class YoloV3:
             cur_dscores = tf.reshape(cur_scores, (-1, num_class))
             cur_bbox = tf.reshape(bbox[b], (-1, 4))
 
-            for i in range(num_class):
-                cur_dscores_cls = cur_dscores[:, i]
+            # for i in range(num_class):
+            #     cur_dscores_cls = cur_dscores[:, i]
 
             # 取所有类别中概率最大的
             cur_scores = tf.reduce_max(cur_dscores, [1])
@@ -172,7 +176,6 @@ class YoloV3:
                 score_threshold=self.yolo_score_threshold,
                 soft_nms_sigma=0.5
             )
-
             # num_valid_nms_boxes = tf.shape(selected_indices)[0]
             # pad_num = self.yolo_max_boxes - num_valid_nms_boxes
             # 数量不够的话做padding
@@ -271,6 +274,45 @@ class YoloV3:
         ))
         return tf.keras.models.Model(inputs=inputs, outputs=outputs)
 
+    def predict(self, images):
+        """预测, bulid_graph里面已经处理好nms, 只需要*对应的image size就行,
+           预测模式下实例化类: is_training=False, weights_path=, batch_size跟随输入建议1, image_shape跟随训练模式,不做调整
+        :param images: [batch, h, w, c] or [h, w, c]
+        :return batch_bboxes: [batch, num_val_nums, (x1, y1, x2, y2)]
+                batch_scores: [batch_size, nms_nums]
+                batch_classes: [batch_size, nms_nums]
+                batch_val_nums: [batch_size, 1]
+        """
+
+        im_shapes = np.shape(images)
+        if len(im_shapes) <= 3:
+            images = [images]
+            self.batch_size = 1
+
+        batch_bboxes = []
+        batch_scores = []
+        batch_classes = []
+        batch_val_nums = []
+
+        for i, im in enumerate(images):
+            im_size_max = np.max(im_shapes[i][0:2])
+            im_scale = float(self.image_shape[0]) / float(im_size_max)
+
+            # resize原始图片
+            im_resize = cv2.resize(im, None, None, fx=im_scale, fy=im_scale, interpolation=cv2.INTER_LINEAR) / 255.
+            im_resize_shape = np.shape(im_resize)
+            im_blob = np.zeros(self.image_shape, dtype=np.float32)
+            im_blob[0:im_resize_shape[0], 0:im_resize_shape[1], :] = im_resize
+            inputs = np.array([im_blob],dtype=np.float32)
+            nms_bboxes, nms_scores, nms_classes, valid_detection_nums = self.yolo_model.predict(inputs)
+
+            batch_bboxes.append(nms_bboxes[0] * self.image_shape[0] / im_scale)
+            batch_scores.append(nms_scores[0])
+            batch_classes.append(nms_classes[0])
+            batch_val_nums.append([valid_detection_nums[0]])
+
+        return batch_bboxes, batch_scores, batch_classes, batch_val_nums
+
     def train(self, epochs, log_dir):
 
         optimizer = tf.keras.optimizers.Adam(learning_rate=0.001)
@@ -284,6 +326,8 @@ class YoloV3:
         summary_writer = tf.summary.create_file_writer(log_dir)
 
         for epoch in range(epochs):
+            if epoch % 20 == 0 and epoch != 0:
+                self.yolo_model.save_weights(log_dir+'/yolov3-tf-{}.h5'.format(epoch))
             for batch in range(train_data.total_batch_size):
                 with tf.GradientTape() as tape:
                     data = train_data.next_batch()
@@ -402,6 +446,8 @@ class YoloV3:
         summary_writer = tf.summary.create_file_writer(log_dir)
 
         for epoch in range(epochs):
+            if epoch % 20 == 0 and epoch != 0:
+                self.yolo_model.save_weights(log_dir+'/yolov3-tf-{}.h5'.format(epoch))
             batch = 0
             for gt_imgs, gt_boxes, gt_classes, yolo_targets_0, yolo_targets_1, yolo_targets_2 in train_tfrecord_data:
                 batch += 1
@@ -492,8 +538,8 @@ class YoloV3:
 
 if __name__ == "__main__":
     yolo3 = YoloV3(classes=[], num_class=91, batch_size=1, is_training=True)
-    # yolo3.train(101, log_dir='./logs')
-    yolo3.train_with_tfrecord(101, log_dir='./logs')
+    yolo3.train(101, log_dir='./logs')
+    # yolo3.train_with_tfrecord(101, log_dir='./logs')
 
     # yolo3 = YoloV3(classes=["a", 'b', 'c'],num_class=3, batch_size=5)
     # yolo3_model = yolo3.build_graph(is_training=False)
