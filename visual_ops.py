@@ -7,7 +7,7 @@ from PIL import Image, ImageDraw, ImageFont
 
 def draw_bounding_box(im, cls, scores, x_min, y_min, x_max, y_max, thickness=2, color=(11, 252, 3), txt_size=0.35):
     im_cp = np.array(im.copy(), dtype=np.uint8)
-    cv2.rectangle(im_cp, (x_min, y_min), (x_max, y_max), color=color, thickness=thickness)
+    cv2.rectangle(im_cp, (int(x_min), int(y_min)), (int(x_max), int(y_max)), color=color, thickness=thickness)
     if cls and scores:
         txt = "{}:{:.3f}".format(cls, scores)
         x_rect_min = int(x_min)
@@ -107,8 +107,7 @@ def _random_colors(N, bright=True):
 
 
 if __name__ == "__main__":
-    pass
-    # print(_random_colors(10)[np.random.choice(10)])
+    print(_random_colors(10)[np.random.choice(10)])
     # from data.xml_ops import xml2dict
     # im_file = "detect_data/JPEGImages_png/Cats_Test4.png"
     # xml_file = "detect_data/Annotations/Cats_Test4.xml"
