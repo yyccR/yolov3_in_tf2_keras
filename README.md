@@ -15,17 +15,17 @@
 
 ### Get start
 
-- 1. 训练
+1. 训练
 ```python
 python3 yolov3.py
 ```
 
-- 2. tensorboard
+2. tensorboard
 ```python
 tensorboard --host 0.0.0.0 --logdir ./logs/ --port 8053 --samples_per_plugin=images=40
 ```    
 
-- 3. 浏览器打开
+3. 查看
 ```python
 http://127.0.0.1:8053
 ```    
@@ -33,8 +33,8 @@ http://127.0.0.1:8053
 
 ### 训练自己的数据
 
-- 1. [labelme](https://github.com/wkentaro/labelme)或者[FiftyOne](https://voxel51.com/docs/fiftyone/)打标自己的数据, 导出为coco格式
+1. [labelme](https://github.com/wkentaro/labelme)打标自己的数据, 导出为coco格式
 
-- 2. `yolov3`的`train`函数中, 替换`CoCoDataGenrator`的`coco_annotation_file`路径为你打标的路径
+2. 参考`CoCoDataGenrator`类实现自己的generator
     
-- 3. `python3 yolov3.py` 训练你的数据
+3. `python3 yolov3.py` 训练你的数据
