@@ -32,6 +32,7 @@ class CoCoDataGenrator:
         target_img_ids = []
         for k in self.coco.imgToAnns:
             annos = self.coco.imgToAnns[k]
+            print(annos)
             if annos:
                 annos = list(filter(lambda x: x['iscrowd'] == self.include_crowd, annos))
                 if annos:
@@ -225,14 +226,14 @@ class CoCoDataGenrator:
 
 
 if __name__ == "__main__":
-    file = "./coco2017/annotations/instances_val2017.json"
+    file = "./instances_val2017.json"
     coco = CoCoDataGenrator(coco_annotation_file=file,include_mask=True,include_keypoint=True)
     # data = coco.next_batch()
     # print(data)
     # data = coco.next_batch()
     # print(data)
-    for i in coco.coco.cats:
-        print(coco.coco.cats[i])
+    # for i in coco.coco.cats:
+    #     print(coco.coco.cats[i])
     # class_names = list(map(lambda x:x['name'],coco.coco.cats))
 
     # coco = COCO(annotation_file=file)

@@ -1,4 +1,5 @@
-
+import sys
+sys.path.append('../yolov3_in_tf2_keras')
 
 import os
 import numpy as np
@@ -317,7 +318,7 @@ class YoloV3:
 
         optimizer = tf.keras.optimizers.Adam(learning_rate=0.001)
         train_data = CoCoDataGenrator(
-            coco_annotation_file="../../data/coco2017/annotations/instances_val2017.json",
+            coco_annotation_file="./data/instances_val2017.json",
             img_shape=self.image_shape,
             batch_size=self.batch_size,
             max_instances=100
@@ -429,7 +430,7 @@ class YoloV3:
 
         optimizer = tf.keras.optimizers.Adam(learning_rate=0.0005)
         train_data = CoCoDataGenrator(
-            coco_annotation_file="../../data/coco2017/annotations/instances_val2017.json",
+            coco_annotation_file="./data/instances_val2017.json",
             img_shape=self.image_shape,
             batch_size=self.batch_size,
             max_instances=100
