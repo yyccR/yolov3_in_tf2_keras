@@ -18,8 +18,9 @@ os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 class YoloV3:
 
     def __init__(self,
-                 classes,
                  num_class,
+                 anchors,
+                 anchor_masks,
                  image_shape=[640, 640, 3],
                  is_training=True,
                  batch_size=5,
@@ -27,7 +28,6 @@ class YoloV3:
                  yolo_iou_threshold=0.5,
                  yolo_score_threshold=0.5,
                  weights_path=None):
-        self.classes = classes
         self.image_shape = image_shape
         self.is_training = is_training
         self.batch_size = batch_size
@@ -36,12 +36,8 @@ class YoloV3:
         self.yolo_score_threshold = yolo_score_threshold
 
         self.num_class = num_class
-        self.anchors = np.array([[17, 20], [43, 52], [66, 127], [132, 69], [116, 243], [205, 149],
-                                 [233, 363], [410, 216], [496, 440]], np.float32) / self.image_shape[0]
-        # self.anchors = np.array([(10, 13), (16, 30), (33, 23), (30, 61), (62, 45),
-        #                          (59, 119), (116, 90), (156, 198), (373, 326)],
-        #                         np.float32) / self.image_shape[0]
-        self.anchor_masks = np.array([[6, 7, 8], [3, 4, 5], [0, 1, 2]])
+        self.anchors = anchors
+        self.anchor_masks = anchor_masks
         self.darnet = DarkNet()
         self.yolo_model = self.build_graph(is_training=self.is_training)
         if not is_training:
@@ -538,7 +534,7 @@ class YoloV3:
 
 
 if __name__ == "__main__":
-    yolo3 = YoloV3(classes=[], num_class=91, batch_size=1, is_training=True)
+    yolo3 = YoloV3(num_class=91, batch_size=1, is_training=True)
     yolo3.train(101, log_dir='./logs')
     # yolo3.train_with_tfrecord(101, log_dir='./logs')
 
