@@ -34,7 +34,7 @@ def main():
 
     # coco数据
     coco_annotation_file = "./data/instances_val2017.json"
-    classes = ['_background_', 'person', 'bicycle', 'car', 'motorcycle', 'airplane', 'bus',
+    classes = ['none', 'person', 'bicycle', 'car', 'motorcycle', 'airplane', 'bus',
                'train', 'truck', 'boat', 'traffic light', 'fire hydrant', 'none', 'stop sign',
                'parking meter', 'bench', 'bird', 'cat', 'dog', 'horse', 'sheep', 'cow', 'elephant',
                'bear', 'zebra', 'giraffe', 'none', 'backpack', 'umbrella', 'none', 'none', 'handbag',
