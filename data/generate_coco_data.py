@@ -1,6 +1,12 @@
 import sys
-import cv2
+
+sys.path.append("../../detector_in_keras")
+
+import re
 import os
+import cv2
+import random
+import traceback
 from pycocotools.coco import COCO
 import numpy as np
 import skimage.io as io
@@ -9,34 +15,42 @@ import skimage.io as io
 class CoCoDataGenrator:
     def __init__(self,
                  coco_annotation_file,
+                 train_img_nums=-1,
                  img_shape=(640, 640, 3),
                  batch_size=1,
                  max_instances=100,
                  include_crowd=False,
                  include_mask=False,
                  include_keypoint=False,
-                 image_mean=np.array([[[102.9801, 115.9465, 122.7717]]]),
-                 use_mini_mask=True,
-                 mini_mask_shape=(56, 56),
-                 data_size = -1
+                 need_down_image=False,
+                 download_image_path=os.path.dirname(os.path.abspath(__file__)) + "/" + './coco_2017_val_images/',
                  ):
-        self.coco_annotation_file = coco_annotation_file
+        # 设置要训练的图片数, -1表示全部
+        self.train_img_nums = train_img_nums
+        # 是否需要下载图片数据, 只有官方CoCo数据才需要下载, 自己打标转CoCo格式不需要
+        self.need_down_image = need_down_image
+        # 设置下载保存coco json文件中图片的目录
+        self.download_image_path = download_image_path
+        # 图片最终resize+padding后的大小
         self.img_shape = img_shape
         self.batch_size = batch_size
+        # 此参数为保证不同size的box,mask能padding到一个batch里
         self.max_instances = max_instances
+        # 是否输出包含crowd类型数据
         self.include_crowd = include_crowd
+        # 是否输出包含mask分割数据
         self.include_mask = include_mask
+        # 是否输出包含keypoint数据
         self.include_keypoint = include_keypoint
-        self.img_mean = image_mean
-        self.use_mini_mask = use_mini_mask
-        self.mini_mask_shape = mini_mask_shape
-        self.data_size = data_size
+        self.coco_annotation_file = coco_annotation_file
 
         self.current_batch_index = 0
         self.total_batch_size = 0
         self.img_ids = []
         self.coco = COCO(annotation_file=coco_annotation_file)
         self.load_data()
+        if self.need_down_image:
+            self.download_image_files()
 
     def load_data(self):
         # 初步过滤数据是否包含crowd
@@ -47,10 +61,33 @@ class CoCoDataGenrator:
                 annos = list(filter(lambda x: x['iscrowd'] == self.include_crowd, annos))
                 if annos:
                     target_img_ids.append(k)
-        if self.data_size >= 0:
-            target_img_ids = target_img_ids[:self.data_size]
+
+        np.random.shuffle(target_img_ids)
+        target_img_ids = target_img_ids[:self.train_img_nums]
+
         self.total_batch_size = len(target_img_ids) // self.batch_size
         self.img_ids = target_img_ids
+
+    def download_image_files(self):
+        """下载coco图片数据"""
+        if not os.path.exists(self.download_image_path):
+            os.makedirs(self.download_image_path)
+
+        if len(os.listdir(self.download_image_path)) > 0:
+            print("image files already downloaded! size: {}".format(len(os.listdir(self.download_image_path))))
+
+        for i, img_id in enumerate(self.img_ids):
+            file_path = self.download_image_path + "./{}.jpg".format(img_id)
+            if os.path.isfile(file_path):
+                print("already exist file: {}".format(file_path))
+            else:
+                try:
+                    im = io.imread(self.coco.imgs[img_id]['coco_url'])
+                    io.imsave(file_path, im)
+                    print("save image {}, {}/{}".format(file_path, i+1, len(self.img_ids)))
+                except Exception as e:
+                    print(traceback.format_exc())
+                    print(img_id, file_path)
 
     def next_batch(self):
         if self.current_batch_index >= self.total_batch_size:
@@ -90,15 +127,16 @@ class CoCoDataGenrator:
                     batch_keypoints.append(data['keypoints'])
 
         self.current_batch_index += 1
+
         if len(batch_imgs) < self.batch_size:
             return self.next_batch()
 
         output = {
-            'imgs': np.array(batch_imgs, dtype=np.float32),
-            'bboxes': np.array(batch_bboxes, dtype=np.float32),
+            'imgs': np.array(batch_imgs, dtype=np.int32),
+            'bboxes': np.array(batch_bboxes, dtype=np.int16),
             'labels': np.array(batch_labels, dtype=np.int8),
             'masks': np.array(batch_masks, dtype=np.int8),
-            'keypoints': np.array(batch_keypoints, dtype=np.float32),
+            'keypoints': np.array(batch_keypoints, dtype=np.int16),
             'valid_nums': np.array(valid_nums, dtype=np.int8)
         }
 
@@ -126,28 +164,14 @@ class CoCoDataGenrator:
         im_blob[0:im_resize_shape[0], 0:im_resize_shape[1], :] = im_resize
 
         # resize对应边框
-        bboxes_resize = np.array(bboxes * im_scale, dtype=np.float32)
+        bboxes_resize = np.array(bboxes * im_scale, dtype=np.int16)
 
         return im_blob, bboxes_resize
-
-    def _resise_mini_mask(self, masks, boxes):
-        """  mask处理成最小mask """
-        mini_masks = []
-        h, w, c = np.shape(masks)
-        for i in range(c):
-            ymin, xmin, ymax, xmax = boxes[i]
-            mask = masks[int(ymin):int(ymax), int(xmin):int(xmax), i]
-            mini_m = cv2.resize(mask, self.mini_mask_shape, interpolation=cv2.INTER_LINEAR)
-            mini_m = np.array(mini_m >= 0.5, dtype=np.int8)
-            mini_m = np.expand_dims(mini_m, axis=-1)
-            mini_masks.append(mini_m)
-        mini_masks = np.concatenate(mini_masks, axis=-1)
-        return mini_masks
 
     def _resize_mask(self, origin_masks):
         """ resize mask数据
         :param origin_mask:
-        :return: mask_resize: [h, w, instance]
+        :return: mask_resize: [instance, h, w]
                  gt_boxes: [N, [ymin, xmin, ymax, xmax]]
         """
         mask_shape = np.shape(origin_masks)
@@ -170,7 +194,7 @@ class CoCoDataGenrator:
             ymin = np.min(rows) if np.min(rows) >= 0 else 0
             xmax = np.max(cols) if np.max(cols) <= w else w
             ymax = np.max(rows) if np.max(rows) <= h else h
-            bdbox = [ymin, xmin, ymax, xmax]
+            bdbox = [xmin, ymin, xmax, ymax]
             gt_boxes.append(bdbox)
 
             mask_blob = np.zeros((self.img_shape[0], self.img_shape[1], 1), dtype=np.float32)
@@ -189,13 +213,11 @@ class CoCoDataGenrator:
         :param image_id:
         :return:
         """
-
         anno_ids = self.coco.getAnnIds(imgIds=image_id, iscrowd=self.include_crowd)
         bboxes = []
         labels = []
         masks = []
         keypoints = []
-
         for i in anno_ids:
             # 边框, 处理成左上右下坐标
             ann = self.coco.anns[i]
@@ -205,7 +227,7 @@ class CoCoDataGenrator:
             ymin = int(ymin)
             xmax = int(xmin + w)
             ymax = int(ymin + h)
-            bboxes.append([ymin, xmin, ymax, xmax])
+            bboxes.append([xmin, ymin, xmax, ymax])
             # 类别ID
             label = ann['category_id']
             labels.append(label)
@@ -213,9 +235,6 @@ class CoCoDataGenrator:
             if self.include_mask:
                 # [instances, h, w]
                 mask = self.coco.annToMask(ann)
-                # cv2.imshow("mask", np.array(mask,dtype=np.uint8)*255)
-                # cv2.imshow("img", img)
-                # cv2.waitKey(0)
                 masks.append(mask)
             if self.include_keypoint and ann.get('keypoints'):
                 keypoint = ann['keypoints']
@@ -253,10 +272,7 @@ class CoCoDataGenrator:
         # 处理最终数据 mask
         if self.include_mask:
             # [h, w, instances]
-            masks, mask_boxes = self._resize_mask(origin_masks=masks)
-            # mini mask
-            if self.use_mini_mask:
-                masks = self._resise_mini_mask(masks, mask_boxes)
+            masks, _ = self._resize_mask(origin_masks=masks)
             if np.shape(masks)[2] > self.max_instances:
                 masks = masks[:self.max_instances, :, :]
             else:
@@ -271,33 +287,58 @@ class CoCoDataGenrator:
             keypoints = np.array(keypoints, dtype=np.int8)
             outputs['keypoints'] = keypoints
 
-        img_coco_url_file = str(self.coco.imgs[image_id].get('coco_url',""))
-        img_url_file = str(self.coco.imgs[image_id].get('url',""))
-        img_local_file = str(self.coco.imgs[image_id].get('file_name',""))
+        # img = io.imread(self.coco.imgs[image_id]['coco_url'])
+        # img_file = self.download_image_path + "./{}.jpg".format(image_id)
+        # if not os.path.isfile(img_file):
+        #     file_path = self.download_image_path + "./{}.jpg".format(image_id)
+        #     print("download image from {}".format(self.coco.imgs[image_id]['coco_url']))
+        #     im = io.imread(self.coco.imgs[image_id]['coco_url'])
+        #     io.imsave(file_path, im)
+        #     print("save image {}".format(file_path))
+        # img = cv2.imread(img_file)
+
+        img_coco_url_file = str(self.coco.imgs[image_id].get('coco_url', ""))
+        img_url_file = str(self.coco.imgs[image_id].get('url', ""))
+        img_local_file = str(self.coco.imgs[image_id].get('file_name', "")).encode('unicode_escape').decode()
         img_local_file = os.path.join(os.path.dirname(self.coco_annotation_file), img_local_file)
+        img_local_file = re.sub(r"\\\\", "/", img_local_file)
         img = []
 
         if os.path.isfile(img_local_file):
             img = io.imread(img_local_file)
         elif img_coco_url_file.startswith("http"):
-            img = io.imread(self.coco.imgs[image_id]['coco_url'])
+            download_image_file = self.download_image_path + "./{}.jpg".format(image_id)
+            if not os.path.isfile(download_image_file):
+                print("download image from {}".format(img_coco_url_file))
+                im = io.imread(img_coco_url_file)
+                io.imsave(download_image_file, im)
+                print("save image {}".format(download_image_file))
+            img = io.imread(download_image_file)
         elif img_url_file.startswith("http"):
-            img = io.imread(self.coco.imgs[image_id]['coco_url'])
+            download_image_file = self.download_image_path + "./{}.jpg".format(image_id)
+            if not os.path.isfile(download_image_file):
+                print("download image from {}".format(img_url_file))
+                im = io.imread(img_url_file)
+                io.imsave(download_image_file, im)
+                print("save image {}".format(download_image_file))
+            img = io.imread(download_image_file)
         else:
             return outputs
+
         if len(np.shape(img)) < 2:
             return outputs
         elif len(np.shape(img)) == 2:
-            img = np.expand_dims(img, axis=-1)
-            img = np.pad(img, [(0, 0), (0, 0), (0, 2)])
+            img = cv2.cvtColor(img, cv2.COLOR_GRAY2RGB)
+            # img = np.expand_dims(img, axis=-1)
+            # img = np.pad(img, [(0, 0), (0, 0), (0, 2)])
         else:
             img = img[:, :, ::-1]
 
         labels = np.array(labels, dtype=np.int8)
-        bboxes = np.array(bboxes, dtype=np.float32)
+        bboxes = np.array(bboxes, dtype=np.int16)
         img_resize, bboxes_resize = self._resize_im(origin_im=img, bboxes=bboxes)
 
-        outputs['img'] = img_resize - self.img_mean
+        outputs['img'] = img_resize
         outputs['labels'] = labels
         outputs['bboxes'] = bboxes_resize
         outputs['valid_nums'] = valid_nums
@@ -306,35 +347,45 @@ class CoCoDataGenrator:
 
 
 if __name__ == "__main__":
+    from visual_ops import draw_bounding_box, draw_instance
+
     file = "./instances_val2017.json"
-    coco = CoCoDataGenrator(coco_annotation_file=file,include_mask=True,include_keypoint=True)
+    # file = "./yanhua/annotations.json"
+    coco = CoCoDataGenrator(
+        coco_annotation_file=file,
+        train_img_nums=-1,
+        include_mask=False,
+        include_keypoint=False,
+        batch_size=1)
+
+    # data = coco.next_batch()
+    # gt_imgs = data['imgs']
+    # gt_boxes = data['bboxes']
+    # gt_classes = data['labels']
+    # gt_masks = data['masks']
+    # valid_nums = data['valid_nums']
+
+    # img = gt_imgs[-1]
+    # for i in range(valid_nums[-1]):
+    #     label = gt_classes[-1][i]
+    #     label_name = coco.coco.cats[label]['name']
+    #     x1, y1, x2, y2 = gt_boxes[-1][i]
+        # mask = gt_masks[-1][:, :, i]
+        # img = draw_instance(img, mask)
+        # img = draw_bounding_box(img, label_name, label, x1, y1, x2, y2)
+    # cv2.imshow("", img)
+    # cv2.waitKey(0)
+
     # data = coco.next_batch()
     # print(data)
-    # data = coco.next_batch()
-    # print(data)
-    # for i in coco.coco.cats:
-    #     print(coco.coco.cats[i])
-    # class_names = list(map(lambda x:x['name'],coco.coco.cats))
-
-    # coco = COCO(annotation_file=file)
+    # for i in range(90):
+    #     if coco.coco.cats.get(i):
+    #         print(coco.coco.cats[i]['name'])
+    #     else:
+    #         print("none")
     #
-    # print("---------------------------")
-    # for anno in coco.dataset['info']:
-    #     print(anno, coco.dataset['info'][anno])
-    #
-    # print("---------------------------")
-    # for anno in coco.dataset['licenses']:
-    #     print(anno)
-    #
-    # print("---------------------------")
-    # for anno in coco.dataset['categories']:
-    #     print(anno)
-    #
-    # print("---------------------------")
-    # for anno in coco.dataset['images']:
-    #     print(anno)
-
-    # print("---------------------------")
-    # for anno in coco.dataset['annotations']:
-    #     print(anno)
-    # anno = coco.anns[900100259690]
+    for i in coco.coco.cats:
+        print(i)
+    # outputs = coco._data_generation(image_id=348045)
+    # cv2.imshow("image", np.array(outputs['img'],dtype=np.uint8))
+    # cv2.waitKey(0)

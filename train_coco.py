@@ -17,11 +17,12 @@ os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 
 
 def main():
-    epochs = 300
-    num_class = 91
+    epochs = 301
+    num_class = 3
     image_shape = [640, 640, 3]
     is_training = True
-    batch_size = 5
+    batch_size = 2
+    data_size = -1
     yolo_max_boxes = 100
     yolo_iou_threshold = 0.5
     yolo_score_threshold = 0.5
@@ -34,7 +35,7 @@ def main():
 
     # coco数据
     coco_annotation_file = "./data/instances_val2017.json"
-    classes = ['none', 'person', 'bicycle', 'car', 'motorcycle', 'airplane', 'bus',
+    classes = ['_background_', 'person', 'bicycle', 'car', 'motorcycle', 'airplane', 'bus',
                'train', 'truck', 'boat', 'traffic light', 'fire hydrant', 'none', 'stop sign',
                'parking meter', 'bench', 'bird', 'cat', 'dog', 'horse', 'sheep', 'cow', 'elephant',
                'bear', 'zebra', 'giraffe', 'none', 'backpack', 'umbrella', 'none', 'none', 'handbag',
@@ -49,7 +50,8 @@ def main():
         coco_annotation_file=coco_annotation_file,
         img_shape=image_shape,
         batch_size=batch_size,
-        max_instances=100
+        max_instances=100,
+        train_img_nums=data_size
     )
 
     # tensorboard日志
@@ -70,6 +72,16 @@ def main():
                 gt_imgs = data['imgs'] / 255.
                 gt_boxes = data['bboxes'] / image_shape[0]
                 gt_classes = data['labels']
+                valid_nums = data['valid_nums']
+
+                print("-------epoch {}, step {}, total step {}--------".format(epoch, batch,
+                                                                               epoch * train_data.total_batch_size + batch))
+                print("current data index: ",
+                      train_data.img_ids[(train_data.current_batch_index - 1) * train_data.batch_size:
+                                        train_data.current_batch_index * train_data.batch_size])
+                for i, nums in enumerate(valid_nums):
+                    print("gt boxes: ", gt_boxes[i, :nums, :] * image_shape[0])
+                    print("gt classes: ", gt_classes[i, :nums])
 
                 yolo_targets = transform_targets(
                     gt_boxes=gt_boxes,
@@ -141,12 +153,12 @@ def main():
 
                 # pred
                 pred_img = gt_imgs[0].copy() * 255
-                boxes, scores, classes, valid_detection_nums = yolo3.yolo_nms(yolo_preds, num_class)
+                boxes, scores, class_ids, valid_detection_nums = yolo3.yolo_nms(yolo_preds, num_class)
                 # print(scores)
                 # print(gt_classes)
                 for i in range(valid_detection_nums[0]):
                     if scores[0][i] > 0.5:
-                        label = classes[0][i].numpy()
+                        label = class_ids[0][i].numpy()
                         class_name = classes[label]
                         xmin, ymin, xmax, ymax = boxes[0][i] * image_shape[0]
                         pred_img = draw_bounding_box(pred_img, class_name, scores[0][i], int(xmin), int(ymin),
