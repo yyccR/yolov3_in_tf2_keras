@@ -4,30 +4,27 @@ sys.path.append('../yolov3_in_tf2_keras')
 
 import os
 import numpy as np
-import cv2
 import tensorflow as tf
 from data_ops import transform_targets
 from loss import loss
 from data.generate_coco_data import CoCoDataGenrator
-from visual_ops import draw_bounding_box
+from data.visual_ops import draw_bounding_box
 from yolov3 import YoloV3
-from data.generate_yolo_tfrecord_files import parse_yolo_coco_tfrecord
 
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 
 
 def main():
     epochs = 301
-    num_class = 3
+    num_class = 91
     image_shape = [640, 640, 3]
     is_training = True
     batch_size = 2
-    data_size = -1
-    yolo_max_boxes = 100
-    yolo_iou_threshold = 0.5
-    yolo_score_threshold = 0.5
+    # -1表示全部数据参与训练
+    train_img_nums = -1
+
     anchors = np.array([[17, 20], [43, 52], [66, 127], [132, 69], [116, 243], [205, 149],
-                        [233, 363], [410, 216], [496, 440]], np.float32) / image_shape[0]
+                        [233, 363], [410, 216], [496, 440]], np.float32) / 640. #image_shape[0]
     # anchors = np.array([(10, 13), (16, 30), (33, 23), (30, 61), (62, 45),
     #                          (59, 119), (116, 90), (156, 198), (373, 326)],
     #                         np.float32) / self.image_shape[0]
@@ -35,7 +32,7 @@ def main():
 
     # coco数据
     coco_annotation_file = "./data/instances_val2017.json"
-    classes = ['_background_', 'person', 'bicycle', 'car', 'motorcycle', 'airplane', 'bus',
+    classes = ['none', 'person', 'bicycle', 'car', 'motorcycle', 'airplane', 'bus',
                'train', 'truck', 'boat', 'traffic light', 'fire hydrant', 'none', 'stop sign',
                'parking meter', 'bench', 'bird', 'cat', 'dog', 'horse', 'sheep', 'cow', 'elephant',
                'bear', 'zebra', 'giraffe', 'none', 'backpack', 'umbrella', 'none', 'none', 'handbag',
@@ -51,7 +48,11 @@ def main():
         img_shape=image_shape,
         batch_size=batch_size,
         max_instances=100,
-        train_img_nums=data_size
+        train_img_nums=train_img_nums,
+        include_mask=False,
+        include_crowd=False,
+        include_keypoint=False,
+        need_down_image=True
     )
 
     # tensorboard日志
