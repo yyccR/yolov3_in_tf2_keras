@@ -8,8 +8,8 @@ import tensorflow as tf
 from darknet import DarkNet
 from loss import loss
 from data_ops import transform_targets
-from data.generate_coco_data import CoCoDataGenrator
-from visual_ops import draw_bounding_box
+from data.generate_coco_data_bak import CoCoDataGenrator
+from data.visual_ops import draw_bounding_box
 from data.generate_yolo_tfrecord_files import parse_yolo_coco_tfrecord
 
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"
@@ -281,8 +281,7 @@ class YoloV3:
                 batch_val_nums: [batch_size, 1]
         """
 
-        im_shapes = np.shape(images)
-        if len(im_shapes) <= 3:
+        if len(np.shape(images)) <= 3:
             images = [images]
             self.batch_size = 1
 
@@ -292,7 +291,8 @@ class YoloV3:
         batch_val_nums = []
 
         for i, im in enumerate(images):
-            im_size_max = np.max(im_shapes[i][0:2])
+            im_shape = np.shape(im)
+            im_size_max = np.max(im_shape[0:2])
             im_scale = float(self.image_shape[0]) / float(im_size_max)
 
             # resize原始图片
