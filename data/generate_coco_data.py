@@ -2,10 +2,10 @@ import sys
 
 sys.path.append("../../detector_in_keras")
 
-import re
 import os
 import cv2
 import random
+import re
 import traceback
 from pycocotools.coco import COCO
 import numpy as np
@@ -62,8 +62,9 @@ class CoCoDataGenrator:
                 if annos:
                     target_img_ids.append(k)
 
-        np.random.shuffle(target_img_ids)
-        target_img_ids = target_img_ids[:self.train_img_nums]
+        if self.train_img_nums > 0:
+            # np.random.shuffle(target_img_ids)
+            target_img_ids = target_img_ids[:self.train_img_nums]
 
         self.total_batch_size = len(target_img_ids) // self.batch_size
         self.img_ids = target_img_ids
@@ -81,13 +82,14 @@ class CoCoDataGenrator:
             if os.path.isfile(file_path):
                 print("already exist file: {}".format(file_path))
             else:
-                try:
-                    im = io.imread(self.coco.imgs[img_id]['coco_url'])
-                    io.imsave(file_path, im)
-                    print("save image {}, {}/{}".format(file_path, i+1, len(self.img_ids)))
-                except Exception as e:
-                    print(traceback.format_exc())
-                    print(img_id, file_path)
+                if self.coco.imgs[img_id].get("coco_url"):
+                    try:
+                        im = io.imread(self.coco.imgs[img_id]['coco_url'])
+                        io.imsave(file_path, im)
+                        print("save image {}, {}/{}".format(file_path, i+1, len(self.img_ids)))
+                    except Exception as e:
+                        traceback.print_exc()
+                        print("current img_id: ", img_id, "current img_file: ", file_path)
 
     def next_batch(self):
         if self.current_batch_index >= self.total_batch_size:
@@ -96,6 +98,7 @@ class CoCoDataGenrator:
 
         batch_img_ids = self.img_ids[self.current_batch_index * self.batch_size:
                                      (self.current_batch_index + 1) * self.batch_size]
+        # print(batch_img_ids)
         batch_imgs = []
         batch_bboxes = []
         batch_labels = []
@@ -103,10 +106,10 @@ class CoCoDataGenrator:
         batch_keypoints = []
         valid_nums = []
         for img_id in batch_img_ids:
-            # {"img":, "bboxes":, "labels":, "masks":, "key_points":}
+            # {"imgs":, "bboxes":, "labels":, "masks":, "key_points":}
             data = self._data_generation(image_id=img_id)
-            if len(np.shape(data['img'])) > 0:
-                batch_imgs.append(data['img'])
+            if len(np.shape(data['imgs'])) > 0:
+                batch_imgs.append(data['imgs'])
                 batch_labels.append(data['labels'])
                 batch_bboxes.append(data['bboxes'])
                 valid_nums.append(data['valid_nums'])
@@ -244,7 +247,7 @@ class CoCoDataGenrator:
 
         # 输出包含5个东西, 不需要则为空
         outputs = {
-            "img": [],
+            "imgs": [],
             "labels": [],
             "bboxes": [],
             "masks": [],
@@ -302,6 +305,7 @@ class CoCoDataGenrator:
         img_local_file = str(self.coco.imgs[image_id].get('file_name', "")).encode('unicode_escape').decode()
         img_local_file = os.path.join(os.path.dirname(self.coco_annotation_file), img_local_file)
         img_local_file = re.sub(r"\\\\", "/", img_local_file)
+
         img = []
 
         if os.path.isfile(img_local_file):
@@ -338,7 +342,7 @@ class CoCoDataGenrator:
         bboxes = np.array(bboxes, dtype=np.int16)
         img_resize, bboxes_resize = self._resize_im(origin_im=img, bboxes=bboxes)
 
-        outputs['img'] = img_resize
+        outputs['imgs'] = img_resize
         outputs['labels'] = labels
         outputs['bboxes'] = bboxes_resize
         outputs['valid_nums'] = valid_nums
@@ -347,7 +351,7 @@ class CoCoDataGenrator:
 
 
 if __name__ == "__main__":
-    from visual_ops import draw_bounding_box, draw_instance
+    from data.visual_ops import draw_bounding_box, draw_instance
 
     file = "./instances_val2017.json"
     # file = "./yanhua/annotations.json"
@@ -356,25 +360,28 @@ if __name__ == "__main__":
         train_img_nums=-1,
         include_mask=False,
         include_keypoint=False,
-        batch_size=1)
+        batch_size=8)
 
-    # data = coco.next_batch()
-    # gt_imgs = data['imgs']
-    # gt_boxes = data['bboxes']
-    # gt_classes = data['labels']
-    # gt_masks = data['masks']
-    # valid_nums = data['valid_nums']
+    # data = coco._data_generation(289343)
 
-    # img = gt_imgs[-1]
-    # for i in range(valid_nums[-1]):
-    #     label = gt_classes[-1][i]
-    #     label_name = coco.coco.cats[label]['name']
-    #     x1, y1, x2, y2 = gt_boxes[-1][i]
+
+    data = coco.next_batch()
+    gt_imgs = data['imgs']
+    gt_boxes = data['bboxes']
+    gt_classes = data['labels']
+    gt_masks = data['masks']
+    valid_nums = data['valid_nums']
+
+    img = gt_imgs[-1]
+    for i in range(valid_nums[-1]):
+        label = gt_classes[-1][i]
+        label_name = coco.coco.cats[label]['name']
+        x1, y1, x2, y2 = gt_boxes[-1][i]
         # mask = gt_masks[-1][:, :, i]
         # img = draw_instance(img, mask)
-        # img = draw_bounding_box(img, label_name, label, x1, y1, x2, y2)
-    # cv2.imshow("", img)
-    # cv2.waitKey(0)
+        img = draw_bounding_box(img, label_name, label, x1, y1, x2, y2)
+    cv2.imshow("", img)
+    cv2.waitKey(0)
 
     # data = coco.next_batch()
     # print(data)
@@ -384,8 +391,8 @@ if __name__ == "__main__":
     #     else:
     #         print("none")
     #
-    for i in coco.coco.cats:
-        print(i)
+    # for i in coco.coco.cats:
+    #     print(i)
     # outputs = coco._data_generation(image_id=348045)
     # cv2.imshow("image", np.array(outputs['img'],dtype=np.uint8))
     # cv2.waitKey(0)
