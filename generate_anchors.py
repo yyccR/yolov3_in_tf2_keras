@@ -11,7 +11,7 @@ def save_coco_all_wh(anno_file, image_shape, output_anchor_file):
     :param output_anchor_file:
     :return:
     """
-    coco = CoCoDataGenrator(anno_file, image_shape, batch_size=1)
+    coco = CoCoDataGenrator(coco_annotation_file=anno_file, img_shape=image_shape, batch_size=1, train_img_nums=-1)
     all_wh = []
     for batch in range(coco.total_batch_size):
         data = coco.next_batch()
@@ -105,10 +105,10 @@ def kmeans(x, K, save_cluster_fig=""):
 
 if __name__ == "__main__":
     # save_coco_all_wh(
-    #     anno_file="../../data/coco2017/annotations/instances_val2017.json",
-    #     image_shape=[640,640,3],
-    #     output_anchor_file='../../data/coco2017/coco2017_val_all_wh.txt'
+    #     anno_file="./data/instances_val2017.json",
+    #     image_shape=[320,320,3],
+    #     output_anchor_file='./data/coco2017_320x320_val_all_wh.txt'
     # )
 
-    data = get_wh('./data/coco2017_val_all_wh.txt')
-    kmeans(data, 9, save_cluster_fig="./data/anchors_test.png")
+    data = get_wh('./data/coco2017_320x320_val_all_wh.txt')
+    kmeans(data, 9, save_cluster_fig="./data/anchors_320x320_test.png")
