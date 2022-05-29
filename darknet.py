@@ -18,7 +18,7 @@ class DarkNet:
                                    use_bias=not batch_norm,
                                    kernel_regularizer=tf.keras.regularizers.l2(0.0005))(x)
         if batch_norm:
-            x = tf.keras.layers.BatchNormalization()(x,training=False)
+            x = tf.keras.layers.BatchNormalization(momentum=0.75)(x)
             x = tf.keras.layers.LeakyReLU(alpha=0.1)(x)
         return x
 

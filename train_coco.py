@@ -19,7 +19,7 @@ def main():
     num_class = 91
     image_shape = [640, 640, 3]
     is_training = True
-    batch_size = 2
+    batch_size = 4
     # -1表示全部数据参与训练
     train_img_nums = -1
 
